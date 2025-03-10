@@ -181,6 +181,43 @@ function formatMistralPrompt(description, language) {
 }
 
 /**
+ * Color code based on language
+ */
+function colorizeCode(code, language) {
+  if (!code) return '';
+  
+  // Simple regex patterns for highlighting
+  const patterns = {
+    comment: /(\/\/.*$|\/\*[\s\S]*?\*\/|#.*$|"""[\s\S]*?"""|'''[\s\S]*?''')/gm,
+    string: /(["'`])(\\(?:\\|\1)|(?!\1).)*?\1/g,
+    keyword: /\b(function|const|let|var|if|else|for|while|return|import|export|class|def|from)\b/g,
+    number: /\b\d+\.?\d*\b/g,
+    function: /\b([a-zA-Z_]\w*)\s*\(/g
+  };
+  
+  // ANSI escape sequences for colors
+  const colors = {
+    comment: '\x1b[90m', // gray
+    string: '\x1b[32m',  // green
+    keyword: '\x1b[35m', // magenta
+    number: '\x1b[33m',  // yellow
+    function: '\x1b[36m', // cyan
+    reset: '\x1b[0m'
+  };
+  
+  // Apply colorization
+  let colorized = code
+    .replace(patterns.comment, match => `${colors.comment}${match}${colors.reset}`)
+    .replace(patterns.string, match => `${colors.string}${match}${colors.reset}`)
+    .replace(patterns.keyword, match => `${colors.keyword}${match}${colors.reset}`)
+    .replace(patterns.number, match => `${colors.number}${match}${colors.reset}`)
+    .replace(patterns.function, (match, funcName) => 
+      `${colors.function}${funcName}${colors.reset}(`);
+  
+  return colorized;
+}
+
+/**
  * Call Codestral API to generate code
  */
 async function generateCodeViaAPI(description, language) {
@@ -560,8 +597,62 @@ function getFileExtension(language) {
   return extensionMap[language.toLowerCase()] || language.toLowerCase();
 }
 
+// Save code to a file with optional colorization
+async function saveCodeToFile(code, filename, colorized = true) {
+  try {
+    // If colorized option is true and we're in a terminal that supports colors
+    if (colorized && process.stdout.isTTY) {
+      // Detect language from file extension
+      const ext = filename.split('.').pop().toLowerCase();
+      const langMap = {
+        'js': 'javascript',
+        'py': 'python',
+        'html': 'html',
+        'css': 'css',
+        'java': 'java',
+        'c': 'c',
+        'cpp': 'c++',
+        'rb': 'ruby',
+        'go': 'go',
+        'rs': 'rust',
+        'ts': 'typescript'
+      };
+      
+      const language = langMap[ext] || 'javascript';
+      
+      // Colorize the code
+      const colorizedCode = colorizeCode(code, language);
+      
+      // Write the colorized output to the file
+      const fs = require('fs');
+      fs.writeFileSync(filename, colorizedCode);
+      
+      return {
+        success: true,
+        message: `Saved colorized ${language} code to ${filename}`,
+        language: language
+      };
+    } else {
+      // Write plain code to file
+      const fs = require('fs');
+      fs.writeFileSync(filename, code);
+      
+      return {
+        success: true,
+        message: `Saved code to ${filename}`
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: `Error saving to ${filename}: ${error.message}`,
+      error: error
+    };
+  }
+}
+
 // Export the API generation function for use in other modules
-module.exports = { generateCodeViaAPI };
+module.exports = { generateCodeViaAPI, colorizeCode, saveCodeToFile };
 
 // For testing directly
 if (require.main === module) {
